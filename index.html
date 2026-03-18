@@ -50,7 +50,6 @@
   .tab-btn { padding: 10px 24px; border-radius: 8px; border: none; background: transparent; color: #8892b0; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
   .tab-btn.active { background: #2a2a4a; color: #fff; }
   .tab-btn:hover:not(.active) { color: #c0c0c0; }
-  .tab-content { display: none; }
   .tab-content.active { display: block; }
 </style>
 </head>
@@ -73,6 +72,7 @@
     <button class="tab-btn active" onclick="switchTab('full')">Full Period (Q4 2015 – Q4 2025)</button>
     <button class="tab-btn" onclick="switchTab('vintage')">All Starting Periods</button>
     <button class="tab-btn" onclick="switchTab('optimize')">Optimize vs S&P 500</button>
+    <button class="tab-btn" onclick="switchTab('sale')">Art Sale Strategies</button>
   </div>
 
   <!-- TAB 1: Full Period (original dashboard) -->
@@ -158,6 +158,71 @@
       <h2>Full Allocation Sweep</h2>
       <p style="color:#8892b0;font-size:13px;margin:-12px 0 16px">Art fixed at 50%. Each row tests a different Gold/BTC split across all vintage starting periods vs S&P 500.</p>
       <div id="opt-table"></div>
+    </div>
+  </div>
+
+  <!-- TAB 4: Art Sale Strategies -->
+  <div id="tab-sale" class="tab-content">
+    <div id="sale-metrics" class="metrics-grid"></div>
+
+    <div class="chart-section">
+      <h2>Total Wealth Over Time</h2>
+      <p style="color:#8892b0;font-size:13px;margin:-12px 0 16px">Cumulative cash returned + remaining portfolio value for each strategy vs S&P 500</p>
+      <div id="sale-wealth-chart"></div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-section">
+        <h2>Cumulative Cash Returned to Investors</h2>
+        <p style="color:#8892b0;font-size:13px;margin:-12px 0 16px">Cash from art sales + excess Gold/BTC sold during rebalancing, returned to investors over years 7–10</p>
+        <div id="sale-cash-chart"></div>
+      </div>
+      <div class="chart-section">
+        <h2>Remaining Portfolio Value</h2>
+        <p style="color:#8892b0;font-size:13px;margin:-12px 0 16px">Value of assets still held in the portfolio</p>
+        <div id="sale-remaining-chart"></div>
+      </div>
+    </div>
+
+    <div class="chart-section">
+      <h2>Portfolio Composition — Buy & Hold (50/25/25)</h2>
+      <p style="color:#8892b0;font-size:13px;margin:-12px 0 16px">Art sells per schedule; Gold and BTC ride untouched</p>
+      <div id="sale-comp-prop-chart"></div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-section">
+        <h2>Portfolio Composition — Rebalance to 50/25/25</h2>
+        <div id="sale-comp-rebal-chart"></div>
+      </div>
+      <div class="chart-section">
+        <h2>Portfolio Composition — Rebalance to 50/15/35</h2>
+        <div id="sale-comp-hold-chart"></div>
+      </div>
+    </div>
+
+    <div class="table-section">
+      <h2>Year-by-Year Breakdown</h2>
+      <p style="color:#8892b0;font-size:13px;margin:-12px 0 16px">Full 10-year period (Q4 2015 – Q4 2025). Art sales begin Year 7 (Q4 2022).</p>
+      <div id="sale-table" style="max-height:600px;overflow-y:auto"></div>
+    </div>
+
+    <hr style="border:none;border-top:1px solid #2a2a4a;margin:48px 0 36px">
+    <h2 style="font-size:24px;font-weight:600;color:#fff;margin-bottom:8px">Sale Period Backtesting</h2>
+    <p style="color:#8892b0;font-size:14px;margin-bottom:28px">Testing the 3 strategies across every possible 4-year window in the data. Each window starts with $100k at 50/25/25 and sells art 20/30/30/20 over 4 years.</p>
+
+    <div id="timing-metrics" class="metrics-grid"></div>
+
+    <div class="chart-section">
+      <h2>Total Wealth by 4-Year Sale Window</h2>
+      <p style="color:#8892b0;font-size:13px;margin:-12px 0 16px">Final total wealth (cash returned + remaining portfolio) for each strategy across different market environments</p>
+      <div id="timing-wealth-chart"></div>
+    </div>
+
+
+    <div class="table-section">
+      <h2>All 4-Year Windows — Detail Table</h2>
+      <div id="timing-table"></div>
     </div>
   </div>
 
@@ -289,16 +354,10 @@ const fullSim = sims[0];
 // TAB SWITCHING
 // ============================================================
 function switchTab(tab) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('tab-' + tab).style.display = 'block';
   event.target.classList.add('active');
-  // Plotly needs a moment after display:block to measure container size
-  setTimeout(function() {
-    document.querySelectorAll('#tab-' + tab + ' .js-plotly-plot').forEach(function(gd) {
-      Plotly.Plots.resize(gd);
-    });
-  }, 100);
 }
 
 // ============================================================
@@ -570,27 +629,49 @@ const darkLayout = {
     <div class="metric-row"><span class="metric-label">Allocation</span><span class="metric-value neutral">${bestRebalExcess.wGold}% Gold / ${bestRebalExcess.wBtc}% BTC</span></div>
     <div class="metric-row"><span class="metric-label">Avg excess CAGR</span><span class="metric-value ${bestRebalExcess.rebalAvgExcess>=0?'positive':'negative'}">${bestRebalExcess.rebalAvgExcess>=0?'+':''}${bestRebalExcess.rebalAvgExcess.toFixed(2)}%</span></div></div>`;
 
-  const labels = results.map(r=>r.label);
+  var btcPcts = results.map(function(r){ return r.wBtc; });
+  var tickLabels = results.map(function(r){ return r.wGold+'G/'+r.wBtc+'B'; });
 
   // Win Rate chart
-  Plotly.newPlot('opt-winrate-chart',[
-    {x:labels, y:results.map(r=>r.holdWinRate), name:'Buy & Hold', type:'bar', marker:{color:'rgba(251,146,60,0.7)'}},
-    {x:labels, y:results.map(r=>r.rebalWinRate), name:'Annual Rebalance', type:'bar', marker:{color:'rgba(52,211,153,0.7)'}}
-  ],{...darkLayout, barmode:'group', xaxis:{...darkLayout.xaxis, title:'Gold / BTC Split (within 50% non-Art allocation)'}, yaxis:{...darkLayout.yaxis, title:'Win Rate vs S&P 500', ticksuffix:'%', range:[0,100]}},{responsive:true});
+  Plotly.newPlot(document.getElementById('opt-winrate-chart'),[
+    {x:btcPcts, y:results.map(function(r){return r.holdWinRate;}), name:'Buy & Hold', type:'bar', marker:{color:'rgba(251,146,60,0.7)'}},
+    {x:btcPcts, y:results.map(function(r){return r.rebalWinRate;}), name:'Annual Rebalance', type:'bar', marker:{color:'rgba(52,211,153,0.7)'}}
+  ],{
+    height:400, barmode:'group',
+    paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+    font:{color:'#8892b0',size:12}, margin:{l:60,r:30,t:30,b:80},
+    legend:{orientation:'h',y:-0.25,font:{size:12}}, hovermode:'x unified',
+    xaxis:{title:'BTC % (Gold = 50% − BTC)', tickvals:btcPcts, ticktext:tickLabels, gridcolor:'#1f1f3a', linecolor:'#2a2a4a'},
+    yaxis:{title:'Win Rate vs S&P 500', ticksuffix:'%', range:[0,100], gridcolor:'#1f1f3a', linecolor:'#2a2a4a'}
+  },{responsive:true});
 
   // Average Excess CAGR chart
-  Plotly.newPlot('opt-excess-chart',[
-    {x:labels, y:results.map(r=>r.holdAvgExcess), name:'Buy & Hold', line:{color:'#fb923c',width:2.5}, mode:'lines+markers'},
-    {x:labels, y:results.map(r=>r.rebalAvgExcess), name:'Annual Rebalance', line:{color:'#34d399',width:2.5}, mode:'lines+markers'}
-  ],{...darkLayout, xaxis:{...darkLayout.xaxis, title:'Gold / BTC Split'}, yaxis:{...darkLayout.yaxis, title:'Avg Excess CAGR vs S&P', ticksuffix:'%'},
-    shapes:[{type:'line',xref:'paper',x0:0,x1:1,y0:0,y1:0,line:{color:'#8892b0',width:1,dash:'dash'}}]},{responsive:true});
+  Plotly.newPlot(document.getElementById('opt-excess-chart'),[
+    {x:btcPcts, y:results.map(function(r){return r.holdAvgExcess;}), name:'Buy & Hold', type:'scatter', mode:'lines+markers', line:{color:'#fb923c',width:2.5}},
+    {x:btcPcts, y:results.map(function(r){return r.rebalAvgExcess;}), name:'Annual Rebalance', type:'scatter', mode:'lines+markers', line:{color:'#34d399',width:2.5}}
+  ],{
+    height:400,
+    paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+    font:{color:'#8892b0',size:12}, margin:{l:60,r:30,t:30,b:80},
+    legend:{orientation:'h',y:-0.25,font:{size:12}}, hovermode:'x unified',
+    xaxis:{title:'BTC %', tickvals:btcPcts, ticktext:tickLabels, gridcolor:'#1f1f3a', linecolor:'#2a2a4a'},
+    yaxis:{title:'Avg Excess CAGR vs S&P', ticksuffix:'%', gridcolor:'#1f1f3a', linecolor:'#2a2a4a'},
+    shapes:[{type:'line',xref:'paper',x0:0,x1:1,y0:0,y1:0,line:{color:'#8892b0',width:1,dash:'dash'}}]
+  },{responsive:true});
 
   // Median Excess CAGR chart
-  Plotly.newPlot('opt-median-chart',[
-    {x:labels, y:results.map(r=>r.holdMedExcess), name:'Buy & Hold', line:{color:'#fb923c',width:2.5}, mode:'lines+markers'},
-    {x:labels, y:results.map(r=>r.rebalMedExcess), name:'Annual Rebalance', line:{color:'#34d399',width:2.5}, mode:'lines+markers'}
-  ],{...darkLayout, xaxis:{...darkLayout.xaxis, title:'Gold / BTC Split'}, yaxis:{...darkLayout.yaxis, title:'Median Excess CAGR vs S&P', ticksuffix:'%'},
-    shapes:[{type:'line',xref:'paper',x0:0,x1:1,y0:0,y1:0,line:{color:'#8892b0',width:1,dash:'dash'}}]},{responsive:true});
+  Plotly.newPlot(document.getElementById('opt-median-chart'),[
+    {x:btcPcts, y:results.map(function(r){return r.holdMedExcess;}), name:'Buy & Hold', type:'scatter', mode:'lines+markers', line:{color:'#fb923c',width:2.5}},
+    {x:btcPcts, y:results.map(function(r){return r.rebalMedExcess;}), name:'Annual Rebalance', type:'scatter', mode:'lines+markers', line:{color:'#34d399',width:2.5}}
+  ],{
+    height:400,
+    paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+    font:{color:'#8892b0',size:12}, margin:{l:60,r:30,t:30,b:80},
+    legend:{orientation:'h',y:-0.25,font:{size:12}}, hovermode:'x unified',
+    xaxis:{title:'BTC %', tickvals:btcPcts, ticktext:tickLabels, gridcolor:'#1f1f3a', linecolor:'#2a2a4a'},
+    yaxis:{title:'Median Excess CAGR vs S&P', ticksuffix:'%', gridcolor:'#1f1f3a', linecolor:'#2a2a4a'},
+    shapes:[{type:'line',xref:'paper',x0:0,x1:1,y0:0,y1:0,line:{color:'#8892b0',width:1,dash:'dash'}}]
+  },{responsive:true});
 
   // Detail table
   let tbl=`<table><thead><tr>
@@ -615,6 +696,457 @@ const darkLayout = {
   tbl+='</tbody></table>';
   document.getElementById('opt-table').innerHTML=tbl;
 })();
+
+// ============================================================
+// TAB 4: ART SALE STRATEGIES
+// ============================================================
+(function renderSaleStrategies() {
+  // Sale schedule spread across quarters within each sale year:
+  // Year 7 (2022, idx 25-28): sell 20% total → 5% per quarter
+  // Year 8 (2023, idx 29-32): sell 30% total → 7.5% per quarter
+  // Year 9 (2024, idx 33-36): sell 30% total → 7.5% per quarter
+  // Year 10 (2025, idx 37-40): sell 20% total → 5% per quarter
+  const SALE_EVENTS = [
+    { idx: 25, fraction: 0.05 }, { idx: 26, fraction: 0.05 }, { idx: 27, fraction: 0.05 }, { idx: 28, fraction: 0.05 },
+    { idx: 29, fraction: 0.075 }, { idx: 30, fraction: 0.075 }, { idx: 31, fraction: 0.075 }, { idx: 32, fraction: 0.075 },
+    { idx: 33, fraction: 0.075 }, { idx: 34, fraction: 0.075 }, { idx: 35, fraction: 0.075 }, { idx: 36, fraction: 0.075 },
+    { idx: 37, fraction: 0.05 }, { idx: 38, fraction: 0.05 }, { idx: 39, fraction: 0.05 }, { idx: 40, fraction: 0.05 }
+  ];
+
+  // Annual rebalance points (Q4 year-end, years 1-6 only — before sales begin)
+  const ANNUAL_REBAL = [4, 8, 12, 16, 20, 24];
+
+  const n = data.length; // 41 entries, indices 0..40
+
+  function ret(i, asset) {
+    return (data[i][asset] - data[i-1][asset]) / data[i-1][asset];
+  }
+
+  // ---- Strategy 1: Proportional Selldown (Buy & Hold) ----
+  // No rebalancing years 1-6. During sale years, sell art/gold/btc proportionally.
+  function simProportional() {
+    let art = INITIAL * 0.50, gold = INITIAL * 0.25, btc = INITIAL * 0.25;
+    let cashReturned = 0;
+    const path = [];
+    path.push({ date: data[0].date, art, gold, btc, portfolio: INITIAL, cash: 0, wealth: INITIAL });
+
+    for (let i = 1; i < n; i++) {
+      art *= (1 + ret(i, 'art'));
+      gold *= (1 + ret(i, 'gold'));
+      btc *= (1 + ret(i, 'btc'));
+
+      const sale = SALE_EVENTS.find(s => s.idx === i);
+      if (sale) {
+        const artRemaining = SALE_EVENTS.filter(s => s.idx < i).reduce((rem, s) => rem - s.fraction, 1.0);
+        const sellFrac = sale.fraction / artRemaining;
+
+        const artSold = art * sellFrac;
+        const goldSold = gold * sellFrac;
+        const btcSold = btc * sellFrac;
+
+        cashReturned += artSold + goldSold + btcSold;
+        art -= artSold;
+        gold -= goldSold;
+        btc -= btcSold;
+      }
+
+      const portfolio = art + gold + btc;
+      path.push({ date: data[i].date, art, gold, btc, portfolio, cash: cashReturned, wealth: cashReturned + portfolio });
+    }
+    return path;
+  }
+
+  // ---- Generic Rebalance Strategy ----
+  // Years 1-6: annual rebalance to target allocation (full buy/sell).
+  // Years 7-10 (sale period): sell art per schedule, then sell-only rebalance
+  //   → compute target portfolio from remaining art, sell excess gold/btc.
+  //   → portfolio naturally reaches $0 when art reaches $0.
+  function simRebalance(tArt, tGold, tBtc) {
+    let art = INITIAL * tArt, gold = INITIAL * tGold, btc = INITIAL * tBtc;
+    let cashReturned = 0;
+    const path = [];
+    path.push({ date: data[0].date, art, gold, btc, portfolio: INITIAL, cash: 0, wealth: INITIAL });
+
+    for (let i = 1; i < n; i++) {
+      art *= (1 + ret(i, 'art'));
+      gold *= (1 + ret(i, 'gold'));
+      btc *= (1 + ret(i, 'btc'));
+
+      // Sale event: sell art, then sell-only rebalance gold/btc
+      const sale = SALE_EVENTS.find(s => s.idx === i);
+      if (sale) {
+        const artRemaining = SALE_EVENTS.filter(s => s.idx < i).reduce((rem, s) => rem - s.fraction, 1.0);
+        const sellFrac = sale.fraction / artRemaining;
+        const artSold = art * sellFrac;
+        cashReturned += artSold;
+        art -= artSold;
+
+        // Sell-only rebalance: compute target based on remaining art
+        const targetTotal = tArt > 0 ? art / tArt : 0;
+        const targetGold = targetTotal * tGold;
+        const targetBtc = targetTotal * tBtc;
+        const goldExcess = Math.max(0, gold - targetGold);
+        const btcExcess = Math.max(0, btc - targetBtc);
+
+        cashReturned += goldExcess + btcExcess;
+        gold -= goldExcess;
+        btc -= btcExcess;
+      }
+
+      // Annual rebalance during pre-sale period (full buy/sell between assets)
+      if (ANNUAL_REBAL.includes(i)) {
+        const total = art + gold + btc;
+        art = total * tArt;
+        gold = total * tGold;
+        btc = total * tBtc;
+      }
+
+      const portfolio = art + gold + btc;
+      path.push({ date: data[i].date, art, gold, btc, portfolio, cash: cashReturned, wealth: cashReturned + portfolio });
+    }
+    return path;
+  }
+
+  const pathProp = simProportional();
+  const pathRebal5025 = simRebalance(0.50, 0.25, 0.25);
+  const pathRebal5035 = simRebalance(0.50, 0.15, 0.35);
+
+  // S&P 500 benchmark: $100k invested at start
+  const sp500Path = data.map(d => INITIAL * d.sp500 / data[0].sp500);
+
+  const dates = data.map(d => d.date);
+  const lastIdx = n - 1;
+
+  const propFinal = pathProp[lastIdx];
+  const r5025Final = pathRebal5025[lastIdx];
+  const r5035Final = pathRebal5035[lastIdx];
+  const sp500Final = sp500Path[lastIdx];
+
+  // Determine winner
+  const strategies = [
+    { name: 'Proportional Selldown', wealth: propFinal.wealth },
+    { name: 'Rebalance 50/25/25', wealth: r5025Final.wealth },
+    { name: 'Rebalance 50/15/35', wealth: r5035Final.wealth }
+  ];
+  strategies.sort((a, b) => b.wealth - a.wealth);
+  const winner = strategies[0];
+
+  // --- Metric Cards ---
+  var metricsEl = document.getElementById('sale-metrics');
+  metricsEl.innerHTML = `
+  <div class="metric-card"><h3>Total Cash Returned</h3>
+    <div class="metric-row"><span class="metric-label" style="color:#fb923c">Proportional</span><span class="metric-value positive">${fmt(propFinal.cash,false,true)}</span></div>
+    <div class="metric-row"><span class="metric-label" style="color:#34d399">Rebal 50/25/25</span><span class="metric-value positive">${fmt(r5025Final.cash,false,true)}</span></div>
+    <div class="metric-row"><span class="metric-label" style="color:#60a5fa">Rebal 50/15/35</span><span class="metric-value positive">${fmt(r5035Final.cash,false,true)}</span></div></div>
+  <div class="metric-card"><h3>Remaining Portfolio</h3>
+    <div class="metric-row"><span class="metric-label" style="color:#fb923c">Proportional</span><span class="metric-value neutral">${fmt(propFinal.portfolio,false,true)}</span></div>
+    <div class="metric-row"><span class="metric-label" style="color:#34d399">Rebal 50/25/25</span><span class="metric-value neutral">${fmt(r5025Final.portfolio,false,true)}</span></div>
+    <div class="metric-row"><span class="metric-label" style="color:#60a5fa">Rebal 50/15/35</span><span class="metric-value neutral">${fmt(r5035Final.portfolio,false,true)}</span></div></div>
+  <div class="metric-card"><h3>Total Wealth (Cash + Portfolio)</h3>
+    <div class="metric-row"><span class="metric-label" style="color:#fb923c">Proportional</span><span class="metric-value ${propFinal.wealth>=sp500Final?'positive':'negative'}">${fmt(propFinal.wealth,false,true)}</span></div>
+    <div class="metric-row"><span class="metric-label" style="color:#34d399">Rebal 50/25/25</span><span class="metric-value ${r5025Final.wealth>=sp500Final?'positive':'negative'}">${fmt(r5025Final.wealth,false,true)}</span></div>
+    <div class="metric-row"><span class="metric-label" style="color:#60a5fa">Rebal 50/15/35</span><span class="metric-value ${r5035Final.wealth>=sp500Final?'positive':'negative'}">${fmt(r5035Final.wealth,false,true)}</span></div>
+    <div class="metric-row"><span class="metric-label" style="color:#8892b0">S&P 500</span><span class="metric-value neutral">${fmt(sp500Final,false,true)}</span></div></div>
+  <div class="metric-card"><h3>Winner</h3>
+    <div class="metric-row"><span class="metric-label">Best strategy</span><span class="metric-value positive">${winner.name}</span></div>
+    <div class="metric-row"><span class="metric-label">Total wealth</span><span class="metric-value positive">${fmt(winner.wealth,false,true)}</span></div>
+    <div class="metric-row"><span class="metric-label">vs S&P 500</span><span class="metric-value ${winner.wealth>=sp500Final?'positive':'negative'}">${winner.wealth>=sp500Final?'+':''}${fmt(winner.wealth-sp500Final,false,true)}</span></div></div>`;
+
+  // Numeric x-axis indices for all charts (0..40)
+  var xNums = [];
+  var xLabels = [];
+  for (var qi = 0; qi < n; qi++) {
+    xNums.push(qi);
+    xLabels.push(data[qi].date.substring(0, 7));
+  }
+
+  var xTickVals = xNums.filter(function(_,i){ return i%4===0; });
+  var xTickText = xLabels.filter(function(_,i){ return i%4===0; });
+  var chartXaxis = { title: 'Quarter', tickvals: xTickVals, ticktext: xTickText, gridcolor: '#1f1f3a', linecolor: '#2a2a4a' };
+
+  // --- Chart 1: Total Wealth Over Time ---
+  Plotly.newPlot(document.getElementById('sale-wealth-chart'), [
+    { x: xNums, y: pathProp.map(function(p){ return p.wealth; }), name: 'Proportional', line: { color: '#fb923c', width: 2.5 } },
+    { x: xNums, y: pathRebal5025.map(function(p){ return p.wealth; }), name: 'Rebal 50/25/25', line: { color: '#34d399', width: 2.5 } },
+    { x: xNums, y: pathRebal5035.map(function(p){ return p.wealth; }), name: 'Rebal 50/15/35', line: { color: '#60a5fa', width: 2.5 } },
+    { x: xNums, y: sp500Path, name: 'S&P 500', line: { color: '#8892b0', width: 2, dash: 'dash' } }
+  ], {
+    height: 450,
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#8892b0', size: 12 }, margin: { l: 70, r: 30, t: 30, b: 80 },
+    legend: { orientation: 'h', y: -0.2, font: { size: 12 } }, hovermode: 'x unified',
+    xaxis: chartXaxis,
+    yaxis: { title: 'Total Wealth ($)', tickprefix: '$', tickformat: ',.0f', gridcolor: '#1f1f3a', linecolor: '#2a2a4a' },
+    shapes: [
+      { type: 'rect', x0: 24.5, x1: 28.5, y0: 0, y1: 1, yref: 'paper', fillcolor: 'rgba(192,132,252,0.06)', line: { width: 0 } },
+      { type: 'rect', x0: 28.5, x1: 32.5, y0: 0, y1: 1, yref: 'paper', fillcolor: 'rgba(192,132,252,0.10)', line: { width: 0 } },
+      { type: 'rect', x0: 32.5, x1: 36.5, y0: 0, y1: 1, yref: 'paper', fillcolor: 'rgba(192,132,252,0.10)', line: { width: 0 } },
+      { type: 'rect', x0: 36.5, x1: 40.5, y0: 0, y1: 1, yref: 'paper', fillcolor: 'rgba(192,132,252,0.06)', line: { width: 0 } }
+    ],
+    annotations: [
+      { x: 26.5, y: 1.02, yref: 'paper', text: 'Yr 7: 20%', showarrow: false, font: { size: 10, color: '#c084fc' } },
+      { x: 30.5, y: 1.02, yref: 'paper', text: 'Yr 8: 30%', showarrow: false, font: { size: 10, color: '#c084fc' } },
+      { x: 34.5, y: 1.02, yref: 'paper', text: 'Yr 9: 30%', showarrow: false, font: { size: 10, color: '#c084fc' } },
+      { x: 38.5, y: 1.02, yref: 'paper', text: 'Yr 10: 20%', showarrow: false, font: { size: 10, color: '#c084fc' } }
+    ]
+  }, { responsive: true });
+
+  // --- Chart 2: Cumulative Cash Returned ---
+  Plotly.newPlot(document.getElementById('sale-cash-chart'), [
+    { x: xNums, y: pathProp.map(function(p){ return p.cash; }), name: 'Proportional', line: { color: '#fb923c', width: 2.5 } },
+    { x: xNums, y: pathRebal5025.map(function(p){ return p.cash; }), name: 'Rebal 50/25/25', line: { color: '#34d399', width: 2.5 } },
+    { x: xNums, y: pathRebal5035.map(function(p){ return p.cash; }), name: 'Rebal 50/15/35', line: { color: '#60a5fa', width: 2.5 } }
+  ], {
+    height: 400,
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#8892b0', size: 12 }, margin: { l: 70, r: 30, t: 30, b: 80 },
+    legend: { orientation: 'h', y: -0.25, font: { size: 12 } }, hovermode: 'x unified',
+    xaxis: chartXaxis,
+    yaxis: { title: 'Cumulative Cash ($)', tickprefix: '$', tickformat: ',.0f', gridcolor: '#1f1f3a', linecolor: '#2a2a4a' }
+  }, { responsive: true });
+
+  // --- Chart 3: Remaining Portfolio Value ---
+  Plotly.newPlot(document.getElementById('sale-remaining-chart'), [
+    { x: xNums, y: pathProp.map(function(p){ return p.portfolio; }), name: 'Proportional', line: { color: '#fb923c', width: 2.5 } },
+    { x: xNums, y: pathRebal5025.map(function(p){ return p.portfolio; }), name: 'Rebal 50/25/25', line: { color: '#34d399', width: 2.5 } },
+    { x: xNums, y: pathRebal5035.map(function(p){ return p.portfolio; }), name: 'Rebal 50/15/35', line: { color: '#60a5fa', width: 2.5 } }
+  ], {
+    height: 400,
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#8892b0', size: 12 }, margin: { l: 70, r: 30, t: 30, b: 80 },
+    legend: { orientation: 'h', y: -0.25, font: { size: 12 } }, hovermode: 'x unified',
+    xaxis: chartXaxis,
+    yaxis: { title: 'Remaining Portfolio ($)', tickprefix: '$', tickformat: ',.0f', gridcolor: '#1f1f3a', linecolor: '#2a2a4a' }
+  }, { responsive: true });
+
+  // --- Composition Charts (stacked areas) ---
+  function plotComposition(elId, path) {
+    Plotly.newPlot(document.getElementById(elId), [
+      { x: xNums, y: path.map(function(p){ return p.art; }), name: 'Art', stackgroup: 'one', line: { width: 0 }, fillcolor: 'rgba(192,132,252,0.7)' },
+      { x: xNums, y: path.map(function(p){ return p.gold; }), name: 'Gold', stackgroup: 'one', line: { width: 0 }, fillcolor: 'rgba(251,191,36,0.7)' },
+      { x: xNums, y: path.map(function(p){ return p.btc; }), name: 'Bitcoin', stackgroup: 'one', line: { width: 0 }, fillcolor: 'rgba(251,146,60,0.7)' }
+    ], {
+      height: 350,
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { color: '#8892b0', size: 12 }, margin: { l: 70, r: 30, t: 30, b: 80 },
+      legend: { orientation: 'h', y: -0.25, font: { size: 12 } }, hovermode: 'x unified',
+      xaxis: chartXaxis,
+      yaxis: { title: 'Portfolio Value ($)', tickprefix: '$', tickformat: ',.0f', gridcolor: '#1f1f3a', linecolor: '#2a2a4a' }
+    }, { responsive: true });
+  }
+
+  plotComposition('sale-comp-prop-chart', pathProp);
+  plotComposition('sale-comp-rebal-chart', pathRebal5025);
+  plotComposition('sale-comp-hold-chart', pathRebal5035);
+
+  // --- Year-by-Year Table ---
+  var yearIndices = [];
+  for (var yi = 0; yi < n; yi += 4) { yearIndices.push(yi); }
+
+  // Track cumulative art sold per year for the table
+  var artSoldByYear = {};
+  for (var si = 0; si < SALE_EVENTS.length; si++) {
+    var yr = Math.floor((SALE_EVENTS[si].idx - 1) / 4); // year index
+    artSoldByYear[yr * 4] = (artSoldByYear[yr * 4] || 0) + SALE_EVENTS[si].fraction;
+  }
+  // Map: idx 28 → 0.20, idx 32 → 0.30, idx 36 → 0.30, idx 40 → 0.20
+  var yearSaleTotals = { 28: 0.20, 32: 0.30, 36: 0.30, 40: 0.20 };
+
+  var tbl = '<table><thead><tr>' +
+    '<th>Year</th><th>Date</th><th>Art Sold</th>' +
+    '<th>Prop Cash</th><th>Prop Portfolio</th><th>Prop Wealth</th>' +
+    '<th>R 25/25 Cash</th><th>R 25/25 Portf</th><th>R 25/25 Wealth</th>' +
+    '<th>R 35/15 Cash</th><th>R 35/15 Portf</th><th>R 35/15 Wealth</th>' +
+    '<th>S&P 500</th>' +
+    '</tr></thead><tbody>';
+
+  var artFractionRemaining = 1.0;
+  for (var ti = 0; ti < yearIndices.length; ti++) {
+    var idx = yearIndices[ti];
+    var yearNum = ti;
+    var yearSale = yearSaleTotals[idx];
+    var artSoldPct = yearSale ? (yearSale * 100).toFixed(0) + '%' : '—';
+    if (yearSale) artFractionRemaining -= yearSale;
+    var artRemainPct = (artFractionRemaining * 100).toFixed(0) + '%';
+    var isSaleYear = !!yearSale;
+
+    var pp = pathProp[idx], pr = pathRebal5025[idx], ph = pathRebal5035[idx];
+    var spVal = sp500Path[idx];
+
+    var maxWealth = Math.max(pp.wealth, pr.wealth, ph.wealth);
+
+    tbl += '<tr' + (isSaleYear ? ' class="highlight-row"' : '') + '>' +
+      '<td style="font-weight:600">Yr ' + yearNum + '</td>' +
+      '<td>' + data[idx].date + '</td>' +
+      '<td style="color:#c084fc">' + artSoldPct + (isSaleYear ? ' (rem: ' + artRemainPct + ')' : '') + '</td>' +
+      '<td>' + fmt(pp.cash, false, true) + '</td>' +
+      '<td>' + fmt(pp.portfolio, false, true) + '</td>' +
+      '<td style="font-weight:' + (pp.wealth === maxWealth ? '700' : '400') + ';color:' + (pp.wealth === maxWealth ? '#fb923c' : '#e0e0e0') + '">' + fmt(pp.wealth, false, true) + '</td>' +
+      '<td>' + fmt(pr.cash, false, true) + '</td>' +
+      '<td>' + fmt(pr.portfolio, false, true) + '</td>' +
+      '<td style="font-weight:' + (pr.wealth === maxWealth ? '700' : '400') + ';color:' + (pr.wealth === maxWealth ? '#34d399' : '#e0e0e0') + '">' + fmt(pr.wealth, false, true) + '</td>' +
+      '<td>' + fmt(ph.cash, false, true) + '</td>' +
+      '<td>' + fmt(ph.portfolio, false, true) + '</td>' +
+      '<td style="font-weight:' + (ph.wealth === maxWealth ? '700' : '400') + ';color:' + (ph.wealth === maxWealth ? '#60a5fa' : '#e0e0e0') + '">' + fmt(ph.wealth, false, true) + '</td>' +
+      '<td style="color:#8892b0">' + fmt(spVal, false, true) + '</td>' +
+      '</tr>';
+  }
+  tbl += '</tbody></table>';
+  document.getElementById('sale-table').innerHTML = tbl;
+
+  // ==========================================================
+  // SALE PERIOD BACKTESTING — test every 4-year window
+  // ==========================================================
+  // For each 4-year window, start fresh at $100k (50/25/25),
+  // sell art 20/30/30/20 over 4 years, compare strategies.
+  // Annual sale fractions: [0.20, 0.30, 0.30, 0.20]
+  // Each year split into 4 quarterly sales.
+
+  function windowSim(startIdx, endIdx, mode, tArt, tGold, tBtc) {
+    // mode: 'prop' = proportional selldown, 'rebal' = sell-only rebalance
+    var a = INITIAL * tArt, g = INITIAL * tGold, b = INITIAL * tBtc;
+    var cash = 0;
+    var yearFracs = [0.20, 0.30, 0.30, 0.20];
+    // Build quarterly sale schedule within this window
+    var sales = {};
+    for (var y = 0; y < 4; y++) {
+      var qFrac = yearFracs[y] / 4;
+      for (var q = 0; q < 4; q++) {
+        var idx = startIdx + y * 4 + q + 1;
+        if (idx <= endIdx) sales[idx] = qFrac;
+      }
+    }
+    var cumSold = 0;
+    for (var i = startIdx + 1; i <= endIdx; i++) {
+      var rArt = (data[i].art - data[i-1].art) / data[i-1].art;
+      var rGold = (data[i].gold - data[i-1].gold) / data[i-1].gold;
+      var rBtc = (data[i].btc - data[i-1].btc) / data[i-1].btc;
+      a *= (1 + rArt); g *= (1 + rGold); b *= (1 + rBtc);
+
+      if (sales[i]) {
+        var rem = 1.0 - cumSold;
+        var sf = rem > 0 ? sales[i] / rem : 0;
+        cumSold += sales[i];
+
+        if (mode === 'prop') {
+          var as = a*sf, gs = g*sf, bs = b*sf;
+          cash += as + gs + bs;
+          a -= as; g -= gs; b -= bs;
+        } else {
+          var as2 = a * sf;
+          cash += as2; a -= as2;
+          var targetTotal = tArt > 0 ? a / tArt : 0;
+          var tg = targetTotal * tGold;
+          var tb = targetTotal * tBtc;
+          var ge = Math.max(0, g - tg);
+          var be = Math.max(0, b - tb);
+          cash += ge + be; g -= ge; b -= be;
+        }
+      }
+    }
+    return { cash: cash, portfolio: a + g + b, wealth: cash + a + g + b };
+  }
+
+  // Generate all 4-year windows (need 16 quarters, so startIdx can go up to n-1-16)
+  var windowResults = [];
+  for (var wi = 0; wi <= n - 1 - 16; wi += 1) {
+    var wStart = wi;
+    var wEnd = wi + 16;
+    var prop = windowSim(wStart, wEnd, 'prop', 0.50, 0.25, 0.25);
+    var r2525 = windowSim(wStart, wEnd, 'rebal', 0.50, 0.25, 0.25);
+    var r1535 = windowSim(wStart, wEnd, 'rebal', 0.50, 0.15, 0.35);
+    windowResults.push({
+      startDate: data[wStart].date,
+      endDate: data[wEnd].date,
+      label: data[wStart].date.substring(0,7) + ' → ' + data[wEnd].date.substring(0,7),
+      prop: prop, r2525: r2525, r1535: r1535
+    });
+  }
+
+  // Win counts
+  var propWins = 0, r2525Wins = 0, r1535Wins = 0;
+  for (var ci = 0; ci < windowResults.length; ci++) {
+    var wr = windowResults[ci];
+    var mx = Math.max(wr.prop.wealth, wr.r2525.wealth, wr.r1535.wealth);
+    if (wr.prop.wealth === mx) propWins++;
+    else if (wr.r2525.wealth === mx) r2525Wins++;
+    else r1535Wins++;
+  }
+  var totalWindows = windowResults.length;
+
+  // Average wealth
+  var avgProp = 0, avgR2525 = 0, avgR1535 = 0;
+  for (var ai = 0; ai < totalWindows; ai++) {
+    avgProp += windowResults[ai].prop.wealth;
+    avgR2525 += windowResults[ai].r2525.wealth;
+    avgR1535 += windowResults[ai].r1535.wealth;
+  }
+  avgProp /= totalWindows; avgR2525 /= totalWindows; avgR1535 /= totalWindows;
+
+  document.getElementById('timing-metrics').innerHTML =
+    '<div class="metric-card"><h3>Strategy Win Count (' + totalWindows + ' windows)</h3>' +
+    '<div class="metric-row"><span class="metric-label" style="color:#fb923c">Proportional</span><span class="metric-value neutral">' + propWins + ' (' + (propWins/totalWindows*100).toFixed(0) + '%)</span></div>' +
+    '<div class="metric-row"><span class="metric-label" style="color:#34d399">Rebal 50/25/25</span><span class="metric-value neutral">' + r2525Wins + ' (' + (r2525Wins/totalWindows*100).toFixed(0) + '%)</span></div>' +
+    '<div class="metric-row"><span class="metric-label" style="color:#60a5fa">Rebal 50/15/35</span><span class="metric-value neutral">' + r1535Wins + ' (' + (r1535Wins/totalWindows*100).toFixed(0) + '%)</span></div></div>' +
+    '<div class="metric-card"><h3>Average Total Wealth</h3>' +
+    '<div class="metric-row"><span class="metric-label" style="color:#fb923c">Proportional</span><span class="metric-value positive">' + fmt(avgProp,false,true) + '</span></div>' +
+    '<div class="metric-row"><span class="metric-label" style="color:#34d399">Rebal 50/25/25</span><span class="metric-value positive">' + fmt(avgR2525,false,true) + '</span></div>' +
+    '<div class="metric-row"><span class="metric-label" style="color:#60a5fa">Rebal 50/15/35</span><span class="metric-value positive">' + fmt(avgR1535,false,true) + '</span></div></div>';
+
+  var wIdx = []; var wTick = [];
+  for (var li = 0; li < totalWindows; li++) {
+    wIdx.push(li);
+    wTick.push(windowResults[li].startDate.substring(0,7));
+  }
+
+  // Total Wealth chart
+  Plotly.newPlot(document.getElementById('timing-wealth-chart'), [
+    { x: wIdx, y: windowResults.map(function(r){ return r.prop.wealth; }), name: 'Proportional', type: 'scatter', mode: 'lines+markers', line: { color: '#fb923c', width: 2 }, marker: { size: 5 } },
+    { x: wIdx, y: windowResults.map(function(r){ return r.r2525.wealth; }), name: 'Rebal 50/25/25', type: 'scatter', mode: 'lines+markers', line: { color: '#34d399', width: 2 }, marker: { size: 5 } },
+    { x: wIdx, y: windowResults.map(function(r){ return r.r1535.wealth; }), name: 'Rebal 50/15/35', type: 'scatter', mode: 'lines+markers', line: { color: '#60a5fa', width: 2 }, marker: { size: 5 } }
+  ], {
+    height: 450,
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#8892b0', size: 12 }, margin: { l: 70, r: 30, t: 30, b: 80 },
+    legend: { orientation: 'h', y: -0.2, font: { size: 12 } }, hovermode: 'x unified',
+    xaxis: { title: 'Window Start Quarter', tickvals: wIdx.filter(function(_,i){return i%4===0;}), ticktext: wTick.filter(function(_,i){return i%4===0;}), gridcolor: '#1f1f3a', linecolor: '#2a2a4a' },
+    yaxis: { title: 'Total Wealth ($)', tickprefix: '$', tickformat: ',.0f', gridcolor: '#1f1f3a', linecolor: '#2a2a4a' },
+    shapes: [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: INITIAL, y1: INITIAL, line: { color: '#555', width: 1, dash: 'dot' } }]
+  }, { responsive: true });
+
+  // Detail table
+  var ttbl = '<table><thead><tr>' +
+    '<th>Window</th>' +
+    '<th>Prop Cash</th><th>Prop Portf</th><th>Prop Wealth</th>' +
+    '<th>R 25/25 Cash</th><th>R 25/25 Portf</th><th>R 25/25 Wealth</th>' +
+    '<th>R 15/35 Cash</th><th>R 15/35 Portf</th><th>R 15/35 Wealth</th>' +
+    '<th>Best</th>' +
+    '</tr></thead><tbody>';
+  for (var ri = 0; ri < windowResults.length; ri++) {
+    var wr2 = windowResults[ri];
+    var maxW = Math.max(wr2.prop.wealth, wr2.r2525.wealth, wr2.r1535.wealth);
+    var bestN = wr2.prop.wealth === maxW ? 'Prop' : (wr2.r2525.wealth === maxW ? 'R 25/25' : 'R 15/35');
+    var bestC = wr2.prop.wealth === maxW ? '#fb923c' : (wr2.r2525.wealth === maxW ? '#34d399' : '#60a5fa');
+    ttbl += '<tr>' +
+      '<td style="font-weight:600;font-size:11px">' + wr2.label + '</td>' +
+      '<td>' + fmt(wr2.prop.cash,false,true) + '</td>' +
+      '<td>' + fmt(wr2.prop.portfolio,false,true) + '</td>' +
+      '<td style="font-weight:' + (wr2.prop.wealth===maxW?'700':'400') + ';color:' + (wr2.prop.wealth===maxW?'#fb923c':'#e0e0e0') + '">' + fmt(wr2.prop.wealth,false,true) + '</td>' +
+      '<td>' + fmt(wr2.r2525.cash,false,true) + '</td>' +
+      '<td>' + fmt(wr2.r2525.portfolio,false,true) + '</td>' +
+      '<td style="font-weight:' + (wr2.r2525.wealth===maxW?'700':'400') + ';color:' + (wr2.r2525.wealth===maxW?'#34d399':'#e0e0e0') + '">' + fmt(wr2.r2525.wealth,false,true) + '</td>' +
+      '<td>' + fmt(wr2.r1535.cash,false,true) + '</td>' +
+      '<td>' + fmt(wr2.r1535.portfolio,false,true) + '</td>' +
+      '<td style="font-weight:' + (wr2.r1535.wealth===maxW?'700':'400') + ';color:' + (wr2.r1535.wealth===maxW?'#60a5fa':'#e0e0e0') + '">' + fmt(wr2.r1535.wealth,false,true) + '</td>' +
+      '<td style="color:' + bestC + ';font-weight:600">' + bestN + '</td>' +
+      '</tr>';
+  }
+  ttbl += '</tbody></table>';
+  document.getElementById('timing-table').innerHTML = ttbl;
+})();
+
+// Hide non-active tabs after all charts have rendered at full size
+document.querySelectorAll('.tab-content:not(.active)').forEach(el => el.style.display = 'none');
 
 </script>
 </body>
